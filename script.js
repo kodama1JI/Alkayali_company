@@ -1,3 +1,59 @@
+function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[ch]));
+}
+
+function renderMedia() {
+    const media = Array.isArray(window.ALKAYALI_MEDIA) ? window.ALKAYALI_MEDIA : [];
+    const gallery = document.getElementById('galleryGrid');
+    const products = document.getElementById('productsGrid');
+    if (!gallery || !products) return;
+
+    const ordered = media.slice();
+    const hookIndex = ordered.findIndex((item) => item.category === 'hooks');
+    if (hookIndex > 0) ordered.unshift(ordered.splice(hookIndex, 1)[0]);
+
+    gallery.innerHTML = media.map((item) => `
+        <div class="gallery-item" data-category="${escapeHtml(item.category)}">
+            <img src="${escapeHtml(item.src)}" alt="${escapeHtml(item.title)}">
+            <div class="gallery-overlay">
+                <i class="fas fa-search-plus"></i>
+                <h4>${escapeHtml(item.title)}</h4>
+                <span>${escapeHtml(item.label)}</span>
+            </div>
+        </div>
+    `).join('');
+
+    products.innerHTML = ordered.map((item, index) => `
+        <article class="product-card${index === 0 ? ' featured' : ''}">
+            ${index === 0 ? '<div class="product-badge-top">الأكثر طلباً</div>' : ''}
+            <button type="button" class="product-image open-photo" aria-label="تكبير الصورة" data-src="${escapeHtml(item.src)}" data-caption="${escapeHtml(item.title)}">
+                <img src="${escapeHtml(item.src)}" alt="${escapeHtml(item.title)}">
+                <span class="product-badge">${escapeHtml(item.label)}</span>
+            </button>
+            <div class="product-content">
+                <h3>${escapeHtml(item.title)}</h3>
+                <p>تُنتج حسب الرسم والمقاس المطلوب.</p>
+                <div class="product-features">
+                    <span>${escapeHtml(item.label)}</span>
+                    <span>حسب الطلب</span>
+                </div>
+                <div class="product-actions">
+                    <button type="button" class="btn btn-wa open-whatsapp" data-product="${escapeHtml(item.title)}"><i class="fab fa-whatsapp"></i> واتساب</button>
+                    <button type="button" class="btn btn-outline ask-quote" data-product="${escapeHtml(item.title)}">اطلب عرض سعر</button>
+                </div>
+            </div>
+        </article>
+    `).join('');
+}
+
+renderMedia();
+
 // ============ Navigation Scroll Effect ============
 const navbar = document.getElementById('navbar');
 window.addEventListener('scroll', () => {
@@ -78,7 +134,6 @@ counters.forEach(counter => {
 
 // ============ Gallery Filter ============
 const filterBtns = document.querySelectorAll('.filter-btn');
-const galleryItems = document.querySelectorAll('.gallery-item');
 
 filterBtns.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -87,7 +142,7 @@ filterBtns.forEach(btn => {
         
         const filter = btn.getAttribute('data-filter');
         
-        galleryItems.forEach(item => {
+        document.querySelectorAll('.gallery-item').forEach(item => {
             if (filter === 'all' || item.getAttribute('data-category') === filter) {
                 item.classList.remove('hidden');
                 item.style.animation = 'fadeIn 0.5s ease';
@@ -145,11 +200,20 @@ document.querySelectorAll('.copy-btn').forEach(btn => {
 // ============ WhatsApp number picker ============
 const waModal = document.getElementById('waModal');
 
-document.querySelectorAll('.open-whatsapp').forEach(btn => {
-    btn.addEventListener('click', () => {
-        waModal.hidden = false;
-        document.body.style.overflow = 'hidden';
+function openWhatsApp(product) {
+    const text = product
+        ? `مرحباً، أرغب بالاستفسار عن: ${product} من منشأة الكيالي.`
+        : 'مرحباً، أرغب بالاستفسار عن منتجات منشأة الكيالي.';
+    waModal.querySelectorAll('.wa-list a').forEach(link => {
+        const number = (link.getAttribute('href').match(/wa\.me\/(\d+)/) || [])[1];
+        link.href = `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
     });
+    waModal.hidden = false;
+    document.body.style.overflow = 'hidden';
+}
+
+document.querySelectorAll('.open-whatsapp').forEach(btn => {
+    btn.addEventListener('click', () => openWhatsApp(btn.dataset.product || ''));
 });
 
 waModal.querySelectorAll('[data-close-wa]').forEach(el => {
@@ -166,10 +230,84 @@ waModal.querySelectorAll('.wa-list a').forEach(link => {
     });
 });
 
+document.querySelectorAll('.ask-quote').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const product = btn.dataset.product || '';
+        const message = document.getElementById('message');
+        const service = document.getElementById('service');
+        if (message) message.value = `المنتج المطلوب: ${product}\n`;
+        if (service) service.value = 'custom';
+        const contact = document.getElementById('contact');
+        if (contact) {
+            window.scrollTo({ top: contact.offsetTop - 80, behavior: 'smooth' });
+        }
+        if (message) message.focus();
+    });
+});
+
+// ============ Photo lightbox ============
+const lightbox = document.getElementById('lightbox');
+const lightboxImg = document.getElementById('lightboxImg');
+const lightboxCaption = document.getElementById('lightboxCaption');
+const photoItems = [];
+
+document.querySelectorAll('.gallery-item, .open-photo').forEach(item => {
+    const img = item.querySelector('img');
+    const src = item.dataset.src || (img && img.getAttribute('src'));
+    const caption = item.dataset.caption || (item.querySelector('h4') && item.querySelector('h4').textContent) || (img && img.alt) || '';
+    if (!src) return;
+    photoItems.push({ src, caption });
+    const index = photoItems.length - 1;
+    item.addEventListener('click', () => openPhoto(index));
+});
+
+let photoIndex = 0;
+
+function openPhoto(index) {
+    photoIndex = index;
+    const item = photoItems[index];
+    lightboxImg.src = item.src;
+    lightboxImg.alt = item.caption;
+    lightboxCaption.textContent = item.caption;
+    lightbox.hidden = false;
+    document.body.style.overflow = 'hidden';
+}
+
+function closePhoto() {
+    lightbox.hidden = true;
+    document.body.style.overflow = '';
+}
+
+function stepPhoto(step) {
+    photoIndex = (photoIndex + step + photoItems.length) % photoItems.length;
+    openPhoto(photoIndex);
+}
+
+lightbox.querySelectorAll('[data-close-photo]').forEach(el => {
+    el.addEventListener('click', closePhoto);
+});
+document.getElementById('lightboxPrev').addEventListener('click', () => stepPhoto(-1));
+document.getElementById('lightboxNext').addEventListener('click', () => stepPhoto(1));
+
+let touchStartX = 0;
+lightbox.addEventListener('touchstart', (e) => {
+    touchStartX = e.changedTouches[0].clientX;
+}, { passive: true });
+lightbox.addEventListener('touchend', (e) => {
+    const delta = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(delta) < 40) return;
+    stepPhoto(delta > 0 ? -1 : 1);
+});
+
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !waModal.hidden) {
         waModal.hidden = true;
         document.body.style.overflow = '';
+    }
+    if (!lightbox.hidden) {
+        if (e.key === 'Escape') closePhoto();
+        if (e.key === 'ArrowRight') stepPhoto(-1);
+        if (e.key === 'ArrowLeft') stepPhoto(1);
     }
 });
 
